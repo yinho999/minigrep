@@ -11,19 +11,20 @@ use regex::Regex;
 #[derive(Parser, Debug)]
 #[clap(author,version,about,long_about=None)]
 struct Args {
-    /// Target path
-    #[clap(value_parser, short, long)]
-    path: String,
-
     /// Regex for search
     #[clap(value_parser)]
     regex: String,
+
+    /// Target path
+    #[clap(value_parser, short, long)]
+    path: String,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
+
 struct Match {
     line_num: usize,
     line: String,
-    regex: Regex,
+    regex: String,
     file_name: PathBuf,
 }
 
@@ -99,11 +100,75 @@ where
                 line: line.to_string(),
                 line_num: i,
                 file_name: path.to_owned(),
-                regex: r.clone(),
+                regex: r.to_string(),
             };
             match_data.push(matches);
         }
     }
 
     Ok(match_data)
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn find_in_exist_file() -> Result<(), Error> {
+        let path = Path::new("test_data/test.txt");
+        let regex = Regex::new("Hello")?;
+        let matches = search_file(path, &regex)?;
+        let correct_ans = vec![
+            Match {
+                line_num: 4,
+                line: "I wave to others to say Hello".to_string(),
+                regex: regex.to_string(),
+                file_name: path.to_path_buf(),
+            },
+            Match {
+                line_num: 6,
+                line: "They say Hello back".to_string(),
+                regex: regex.to_string(),
+                file_name: path.to_path_buf(),
+            },
+        ];
+        assert_eq!(correct_ans.iter().eq(matches.iter()), true);
+        Ok(())
+    }
+
+    #[test]
+    fn find_in_exist_dir() -> Result<(), Error> {
+        let path = Path::new("test_data/");
+        let regex = Regex::new("Hello")?;
+        let matches = search_dir(path, &regex, &|_e, _p| {}, &|_e, _p| {})?;
+        assert_eq!(matches, ());
+        Ok(())
+    }
+
+    #[test]
+    fn find_non_exist_file() -> Result<(), Error> {
+        let path = Path::new("test_data/non_existed.txt");
+        let regex = Regex::new("Hello")?;
+        if let Err(e) = search_file(path, &regex) {
+            assert_eq!(
+                e.to_string(),
+                "No such file or directory (os error 2)".to_string()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn find_non_exist_dir() -> Result<(), Error> {
+        let path = Path::new("non_existed/");
+        let regex = Regex::new("Hello")?;
+        if let Err(e) = search_dir(path, &regex, &|_e, _p| {}, &|_e, _p| {}) {
+            assert_eq!(
+                e.to_string(),
+                "No such file or directory (os error 2)".to_string()
+            );
+        }
+        Ok(())
+    }
 }
